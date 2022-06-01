@@ -14,12 +14,32 @@ fn run() {
         println!("usage: maze <width> <height>");
         return;
     }
+
+    let mut res: Result<Maze, String> = Err("invalid width or height!".to_string());
     if let Ok(w) = args[1].parse::<u32>() {
         if let Ok(h) = args[2].parse::<u32>() {
-            if let Err(msg) = Maze::gen(w, h) {
-                println!("gen maze failure! msg:\n{}", msg)
-            }
+            res = Maze::gen(w, h);
         }
     }
-}
 
+    let maze: Maze;
+    match res {
+        Ok(tmp) => maze = tmp,
+        Err(msg) => {
+            println!("gen maze failure! msg:\n{}", msg);
+            return;
+        }
+    }
+
+    // let conn_char: Vec<char> = " ↓↑│→┘┐┤←└┌├─┴┬┼".chars().collect();
+    let conn_char: Vec<char> = " ··│·┘┐┤·└┌├─┴┬┼".chars().collect();
+    println!();
+    for row in maze.map {
+        for val in row {
+            print!("{}", conn_char[val as usize]);
+            // print!("{}", val as usize);
+        }
+        println!();
+    }
+    println!();
+}

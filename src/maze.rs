@@ -1,6 +1,6 @@
 // --- use
 use crate::v2::{rev, Dir, Pos, D, L, R, U};
-use rand::{self, Rng};
+use rand::{self, prelude::ThreadRng, Rng};
 
 // --- 常量
 // 限制
@@ -24,7 +24,7 @@ pub struct Mark {
 pub struct Maze {
     w: u32,
     h: u32,
-    map: Vec<Vec<u8>>,
+    pub map: Vec<Vec<u8>>,
 }
 
 // --- impl
@@ -39,24 +39,25 @@ impl Maze {
         let mut maze = Maze {
             w,
             h,
-            map: vec![vec![0u8; h as usize]; w as usize],
+            map: vec![vec![0u8; w as usize]; h as usize],
         };
         // 开通
-        let succ = maze.dig();
-
-        // return
-        if succ {
-            Ok(maze)
-        } else {
-            Err("生成失败，请检查".to_string())
+        let more = maze.dig();
+        // 查漏
+        if more > 0 {
+            maze.check(more);
         }
+        println!("\n finished");
+        // return
+        Ok(maze)
     }
 
     /// 挖掘通道
-    fn dig(&mut self) -> bool {
+    fn dig(&mut self) -> u32 {
         let mut pre_d = 0u8;
+        let all = self.w * self.h;
         // 剩余数量
-        let mut more = self.w * self.h;
+        let mut more = all;
         // 随机数生成器
         let mut rng = rand::thread_rng();
         // 拐点
@@ -68,69 +69,80 @@ impl Maze {
         };
         println!("start at ({},{})", p.x, p.y);
 
-        let all = self.w * self.h;
-        while more > 0 {
-            let count = all - more;
-            print!(
-                "\r {}({}%) ",
-                count,
-                ((count as f32 / all as f32) * 100.0) as u32
-            );
-            // 四周情况
-            let opt_d: Vec<Mark> = self.nearby(&p, true);
-            let opt_len = opt_d.len();
-
-            // 如果没有可用方向，回溯至上一个拐点
-            if opt_len < 1 {
-                if let Some(next) = corners.pop() {
-                    // println!("\rback");
-                    p = next;
-                    continue;
-                }
-                // 没有拐点，结束
-                println!("... 100%");
-                more -= 1;
+        loop {
+            prgs(all, more);
+            if more < 1 {
                 break;
             }
 
-            // 取方向 + 坐标
-            let dest: &Mark = &opt_d[if opt_len < 2 {
-                0
+            // 步进向四周随机一个方向
+            let ops: Vec<Mark> = self.nearby(&p, true);
+            if let Some(dest) = ran_one(&ops, &mut rng) {
+                // dest.val 表示其相对于 p 的方向
+                self.dig_to(&p, dest);
+
+                // 保存拐点
+                let next_d = dest.val;
+                if pre_d > 0 && next_d != pre_d {
+                    corners.push(Pos::cp(&p));
+                }
+
+                p.goto(&dest.p);
+                pre_d = next_d;
+                more -= 1;
             } else {
-                rng.gen_range(0..opt_len)
-            }];
-
-            // dest.val 表示其相对于 p 的方向
-            self.dig_to(&p, dest);
-
-            // 保存拐点
-            let next_d = dest.val;
-            if pre_d > 0 && next_d != pre_d {
-                corners.push(Pos::cp(&p));
+                // 如果没有可用方向，回溯至上一个拐点
+                if let Some(next) = corners.pop() {
+                    p = next;
+                    continue;
+                } else {
+                    more -= 1; // 没有拐点，结束
+                    prgs(all, more);
+                    break;
+                }
             }
-
-            // 准备下一轮
-            p.goto(&dest.p);
-            pre_d = next_d;
-            more -= 1;
         }
-        println!("end dig");
-        return more < 1;
+        return more;
+    }
+
+    /// 查漏补缺
+    fn check(&mut self, _more: u32) {
+        let all = self.w * self.h;
+        let mut more = _more;
+        // 随机数生成器
+        let mut rng = rand::thread_rng();
+        for y in 0..self.h {
+            for x in 0..self.w {
+                if self.map[y as usize][x as usize] > 0 {
+                    continue;
+                }
+                let p = Pos { x, y };
+                let ops = self.nearby(&p, false);
+                if let Some(dest) = ran_one(&ops, &mut rng) {
+                    self.dig_to(&p, dest);
+                    more -= 1;
+                    prgs(all, more);
+                    if more < 1 {
+                        break;
+                    }
+                }
+            } // for x
+        } // for y
     }
 
     /// # 连接两点
     /// **dest**中**val**的值是相对于**src**的方向
     fn dig_to(&mut self, src: &Pos, dest: &Mark) {
-        let (sx, sy, dx, dy) = (
-            src.x as usize,
-            src.y as usize,
-            dest.p.x as usize,
-            dest.p.y as usize,
-        );
-        // update src
-        conn(&mut self.map[sx][sy], dest.val);
-        // udpate dest
-        conn(&mut self.map[dx][dy], rev(dest.val));
+        let ((sx, sy), (dx, dy)) = (src.tup_usz(), dest.p.tup_usz());
+        let cross = U + D + L + R;
+        let v = &mut self.map[sy][sx];
+        if *v < cross {
+            *v += dest.val;
+        }
+        let v = &mut self.map[dy][dx];
+        if *v < cross {
+            *v += rev(dest.val);
+        }
     }
 
     /// 获取四周的情况
@@ -153,15 +165,26 @@ impl Maze {
         if p.x >= self.w || p.y >= self.h {
             None
         } else {
-            Some(self.map[p.x as usize][p.y as usize])
+            let (x, y) = p.tup_usz();
+            Some(self.map[y][x])
         }
     }
 }
 
-/// # 尝试连接
-/// 若**src**已经4向通，则不更新
-fn conn(src: &mut u8, dest: u8) {
-    if *src < U + D + L + R {
-        *src += dest;
+fn prgs(all: u32, more: u32) {
+    let count = all - more;
+    print!(
+        "\r {}({}%) ",
+        count,
+        ((count as f32 / all as f32) * 100.0) as u32
+    );
+}
+
+fn ran_one<'s, T>(src: &'s Vec<T>, ran: &mut ThreadRng) -> Option<&'s T> {
+    let len = src.len();
+    match len {
+        0 => None,
+        1 => Some(&src[0]),
+        _ => Some(&src[ran.gen_range(0..len)]),
     }
 }

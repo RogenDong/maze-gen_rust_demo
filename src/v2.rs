@@ -1,4 +1,3 @@
-
 // 方向真值
 pub const U: u8 = 1;
 pub const D: u8 = 2;
@@ -28,31 +27,11 @@ pub enum Dir {
     Right,
 }
 
-/// 连接方向枚举
-pub enum Crs {
-    // U-1     D-2     UD-3
-    Ver,
-    // L-4     UL-5    DL-6
-    UL,
-    DL,
-    // UDL-7   R-8     UR-9
-    UDL,
-    UR,
-    // DR-10   UDR-11  LR-12
-    DR,
-    UDR,
-    Hor,
-    // ULR-13  DLR-14  UDLR-15
-    ULR,
-    DLR,
-    X,
-}
-
 // --- impl
 
 impl Pos {
-    pub fn at(x: u32, y: u32) -> Pos {
-        Pos { x, y }
+    pub fn tup_usz(&self) -> (usize, usize) {
+        (self.x as usize, self.y as usize)
     }
 
     /// 复制坐标
@@ -76,8 +55,7 @@ impl Pos {
             self.y = max;
             return false;
         }
-        let mut x = self.x as i32;
-        let mut y = self.y as i32;
+        let (mut x, mut y) = (self.x as i32, self.y as i32);
         match d {
             Dir::Up => y -= 1,
             Dir::Down => y += 1,
@@ -86,12 +64,11 @@ impl Pos {
         }
         // return
         if x < 0 || y < 0 {
-            false
-        } else {
-            self.x = x as u32;
-            self.y = y as u32;
-            true
+            return false;
         }
+        self.x = x as u32;
+        self.y = y as u32;
+        true
     }
 
     /// 尝试根据方向获取新坐标
@@ -113,32 +90,12 @@ impl Pos {
 }
 
 impl Dir {
-    pub fn by(v: u8) -> Option<Dir> {
-        match v {
-            U => Some(Dir::Up),
-            D => Some(Dir::Down),
-            L => Some(Dir::Left),
-            R => Some(Dir::Right),
-            _ => None,
-        }
-    }
-
     pub fn val(&self) -> u8 {
         match self {
             Dir::Up => U,
             Dir::Down => D,
-            Dir::Left => R,
-            Dir::Right => L,
-        }
-    }
-
-    /// 取反方向枚举
-    pub fn rev(&self) -> Dir {
-        match self {
-            Dir::Up => Dir::Down,
-            Dir::Down => Dir::Up,
-            Dir::Left => Dir::Right,
-            Dir::Right => Dir::Left,
+            Dir::Left => L,
+            Dir::Right => R,
         }
     }
 }
