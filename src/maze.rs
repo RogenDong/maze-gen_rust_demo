@@ -128,7 +128,7 @@ impl Maze {
 
     /// 挖掘通道
     fn dig(&mut self) {
-        let mut pre_dv = 0u8;
+        // 总格子数
         let all = self.w * self.h;
         // 剩余数量
         let mut more = all;
@@ -136,13 +136,15 @@ impl Maze {
         let mut rng = rand::thread_rng();
         // 拐点
         let mut corners: Vec<Pos> = Vec::with_capacity(more as usize);
+        // 上一个方向（方向值）
+        let mut pre_dv = 0u8;
         // 坐标 —— 首个随机
         let mut p = Pos {
             x: rng.gen_range(0..self.w),
             y: rng.gen_range(0..self.h),
         };
         println!("start at ({},{})", p.x, p.y);
-
+        // TODO 从起点周围4方向并行挖掘
         loop {
             prgs(all, more);
             if more < 1 {
@@ -161,17 +163,17 @@ impl Maze {
                 p.goto(&dest.p);
                 pre_dv = next_dv;
                 more -= 1;
-            } else {
-                // 如果没有可用方向，回溯至上一个拐点
-                if let Some(next) = corners.pop() {
-                    p = next;
-                    continue;
-                } else {
-                    more -= 1; // 没有拐点，结束
-                    prgs(all, more);
-                    break;
-                }
+                continue;
             }
+            // 如果没有可用方向，回溯至上一个拐点
+            if let Some(next) = corners.pop() {
+                p = next;
+                continue;
+            }
+            // 没有拐点，结束
+            more -= 1;
+            prgs(all, more);
+            break;
         }
         println!()
     }
@@ -198,18 +200,21 @@ impl Maze {
     /// - `Mark::p` 目标点
     /// - `Mark::d` 目标点相对于中心点的方向
     fn nearby(&self, p: &Pos, just_unk: bool) -> Vec<Mark> {
-        let mut v = Vec::with_capacity(4);
+        let mut result = Vec::with_capacity(4);
         for d in DIR_LS {
-            if let Some(n) = p.peek(d) {
-                if n.x < self.w && n.y < self.h {
-                    let m = self[&n];
-                    if m > 0 && (just_unk || (d & m)) {
+            if let Some(near) = p.peek(d) {
+                if near.x < self.w && near.y < self.h {
+                    // 获取点位向标（已打通的方向）
+                    let dm = self[&near];
+                    // 跳过：点位已通 &&（只取未通 || 与当前点连通）
+                    if dm > 0 && (just_unk || (d & dm)) {
                         continue;
                     }
-                    v.push(Mark { p: n, d });
+                    result.push(Mark { p: near, d });
                 }
             }
         }
-        v
+        // return
+        result
     }
 }
